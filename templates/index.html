@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Stock Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+</head>
+<body class="container mt-4">
+    <h1 class="text-center">📈 Interactive Stock Dashboard</h1>
+
+    <!-- Real-Time Notification Banner -->
+    <div id="notification" class="alert alert-warning text-center" style="display: none;"></div>
+
+    <!-- Company Selection Form -->
+    <form id="stockForm" class="mb-3">
+        <label for="company">Select Company:</label>
+        <select id="company" name="company" class="form-select">
+            {% for symbol, name in companies.items() %}
+                <option value="{{ symbol }}" {% if symbol == default_symbol %}selected{% endif %}>{{ name }} ({{ symbol }})</option>
+            {% endfor %}
+        </select>
+
+        <div class="mt-2">
+            <label for="start_date">Start Date:</label>
+            <input type="date" id="start_date" name="start_date" class="form-control" value="{{ default_start }}">
+        </div>
+        <div class="mt-2">
+            <label for="end_date">End Date:</label>
+            <input type="date" id="end_date" name="end_date" class="form-control" value="{{ default_end }}">
+        </div>
+
+        <button type="submit" class="btn btn-primary mt-2">Update Data</button>
+        <button id="export_csv" class="btn btn-success mt-2">Export CSV</button>
+    </form>
+
+    <!-- Stock Data Table -->
+    <h3 class="mt-4">📊 Historical Stock Data</h3>
+    <div id="stock_data">
+        {{ hist_data|safe }}
+    </div>
+
+    <!-- Live Stock Updates -->
+    <h3 class="mt-4">📡 Live Stock Prices</h3>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Company</th>
+                <th>Symbol</th>
+                <th>Current Price</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for symbol, name in companies.items() %}
+                <tr>
+                    <td>{{ name }}</td>
+                    <td>{{ symbol }}</td>
+                    <td id="{{ symbol }}">Fetching...</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- Stock Price Graph -->
+    <h3 class="mt-4">📉 Stock Price Trends</h3>
+    
+    <img id="stock_chart" src="/plot/{{ default_symbol }}?start_date={{ default_start }}&end_date={{ default_end }}" alt="Stock Price Chart" class="img-fluid">
+    <canvas id="dynamic_stock_chart" class="img-fluid"></canvas>
+
+    <script>
+        const ctx = document.getElementById('dynamic_stock_chart').getContext('2d');
+        let stockChart;
+
+        function updateChart(data) {
+            if (stockChart) {
+                stockChart.destroy();
+            }
+            stockChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.dates,
+                    datasets: [{
+                        label: 'Stock Price',
+                        data: data.prices,
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        borderWidth: 2,
+                        fill: true,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Date'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Price'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        $("#stockForm").on("submit", function(event) {
+            event.preventDefault();
+            $.post("/update", $(this).serialize(), function(response) {
+                $("#stock_data").html(response.hist_data);
+                if (response.notification) {
+                    $("#notification").text(response.notification).fadeIn();
+                } else {
+                    $("#notification").fadeOut();
+                }
+                // Update the stock chart dynamically
+                updateChart(response.chart_data);
+            });
+        });
+    </script>
+
+
+    <script>
+        var socket = io();
+        socket.on('stock_update', function(data) {
+            document.getElementById(data.symbol).innerText = `$${data.price.toFixed(2)}`;
+        });
+
+        $("#stockForm").on("submit", function(event) {
+            event.preventDefault();
+            $.post("/update", $(this).serialize(), function(response) {
+                $("#stock_data").html(response.hist_data);
+                if (response.notification) {
+                    $("#notification").text(response.notification).fadeIn();
+                } else {
+                    $("#notification").fadeOut();
+                }
+                // Update the stock chart based on the selected company and date range
+                const company = $("#company").val();
+                const startDate = $("#start_date").val();
+                const endDate = $("#end_date").val();
+                $("#stock_chart").attr("src", `/plot/${company}?start_date=${startDate}&end_date=${endDate}`);
+            });
+        });
+
+
+    </script>
+
+    <script>
+        $(document).ready(function() {
+            $("#export_csv").click(function(event) {
+                event.preventDefault();
+                const company = $("#company").val();
+                const startDate = $("#start_date").val();
+                const endDate = $("#end_date").val();
+                window.location.href = `/export_csv/${company}?start_date=${startDate}&end_date=${endDate}`;
+            });
+        });
+    </script>
+    
+</body>
+</html>
