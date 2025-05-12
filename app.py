@@ -11,6 +11,7 @@ import time
 import logging
 import matplotlib.pyplot as plt
 import io
+import requests
 
 app = Flask(__name__)
 socketio = SocketIO(app)
@@ -69,15 +70,42 @@ def check_price_change(df, symbol, threshold=5):
         return f"🚨 {symbol} price changed by {percentage_change:.2f}% (Latest: ${latest_price:.2f})"
     return None
 
-# Background thread for live stock updates
+    # Background thread for live stock updates using Marketstack API
+    
+MARKETSTACK_API_KEY = 'f4444af09798fdf1f8dfb0a285c4c2c5'  # Replace with your Marketstack API key
+
 def fetch_live_stock_data():
     while True:
         for symbol in COMPANIES.keys():
-            df = fetch_stock_data(symbol, datetime.now().strftime('%Y-%m-%d'), datetime.now().strftime('%Y-%m-%d'))
-            if not df.empty:
-                price_update = {"symbol": symbol, "price": df['Close'].iloc[-1]}
-                socketio.emit('stock_update', price_update)  # Emit update to frontend
-        time.sleep(60)  # Update every minute
+            try:
+                url = f"http://api.marketstack.com/v1/eod/latest"
+                params = {
+                    "access_key": MARKETSTACK_API_KEY,
+                    "symbols": symbol
+                }
+                response = requests.get(url, params=params)
+                response.raise_for_status()  # Raise error for failed requests
+                data = response.json()
+
+                if "data" in data and len(data["data"]) > 0:
+                    latest_data = data["data"][0]
+                    price_update = {
+                        "symbol": symbol,
+                        "price": latest_data["close"]  # 'close' is the latest price field
+                    }
+                    # Store in cache
+                    cache_key = f"{symbol}_live"
+                    stock_cache[cache_key] = price_update
+                    last_fetch_time[cache_key] = datetime.now()
+
+                    # Emit update to frontend
+                    socketio.emit('stock_update', price_update)
+                    logger.info(f"Emitted live update for {symbol}: {price_update['price']}")
+                else:
+                    raise ValueError(f"No live data available for {symbol}")
+            except Exception as e:
+                logger.error(f"Error fetching live data for {symbol}: {e}")
+        time.sleep(600)  # Update every hour
 
 threading.Thread(target=fetch_live_stock_data, daemon=True).start()
 
@@ -133,32 +161,6 @@ def index():
                          default_symbol=symbol,
                          companies=COMPANIES)
     
-# @app.route('/')
-# def index():
-#     symbol = 'AAPL'
-#     end_date = datetime.now()
-#     start_date = end_date - timedelta(days=365)
-
-#     df = fetch_stock_data(symbol, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
-#     notification = check_price_change(df, symbol)
-#     hist_data_html = df.to_html(classes='table table-striped', index=False)
-
-#     return render_template('index.html', hist_data=hist_data_html, notification=notification, default_symbol=symbol, companies=COMPANIES)
-
-# @app.route('/')
-# def index():
-#     end_date = datetime.now()
-#     start_date = end_date - timedelta(days=365)
-
-#     stock_data = {}
-
-#     for symbol in COMPANIES.keys():
-#         df = fetch_stock_data(symbol, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
-#         if not df.empty:
-#             stock_data[symbol] = df.to_html(classes='table table-striped', index=False)
-
-#     return render_template('index.html', hist_data=stock_data[symbol], stock_data=stock_data, companies=COMPANIES)
-
 
 @app.route('/update', methods=['POST'])
 def update():
