@@ -27,10 +27,8 @@ last_fetch_time = {}
 # List of top US companies by market cap
 COMPANIES = {
     'AAPL': 'Apple', 'MSFT': 'Microsoft', 'NVDA': 'Nvidia', 'GOOGL': 'Alphabet',
-    'AMZN': 'Amazon', 'META': 'Meta', 'TSLA': 'Tesla', 'BRK-B': 'Berkshire Hathaway',
-    'LLY': 'Eli Lilly', 'AVGO': 'Broadcom'
+    'AMZN': 'Amazon'
 }
-
 
 # Function to fetch stock data with caching
 def fetch_stock_data(symbol, start_date, end_date):
@@ -72,7 +70,7 @@ def check_price_change(df, symbol, threshold=5):
 
     # Background thread for live stock updates using Marketstack API
     
-MARKETSTACK_API_KEY = 'f4444af09798fdf1f8dfb0a285c4c2c5'  # Replace with your Marketstack API key
+MARKETSTACK_API_KEY = 'fb94be82653b839a3a87920522c84e0e'  # Replace with your Marketstack API key
 
 def fetch_live_stock_data():
     while True:
@@ -105,7 +103,7 @@ def fetch_live_stock_data():
                     raise ValueError(f"No live data available for {symbol}")
             except Exception as e:
                 logger.error(f"Error fetching live data for {symbol}: {e}")
-        time.sleep(600)  # Update every hour
+        time.sleep(60)  # Update every hour
 
 threading.Thread(target=fetch_live_stock_data, daemon=True).start()
 
